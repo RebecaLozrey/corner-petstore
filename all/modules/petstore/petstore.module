@@ -1,0 +1,104 @@
+<?php
+/*
+*
+*Implements hook form alter
+*/
+function petstore_form_alter(&$form, $form_state, $form_id) {
+	if($form_id == 'pet_data_sheet_node_form'){
+		$form['actions']['submit']['#submit'][] = 'petstore_form_submit_handler';	
+	}
+}
+/*
+*
+*CUSTROM SUBMIT HANDLER FUNCTION 
+*/
+function petstore_form_submit_handler(&$form, &$form_state) {	
+	$node = $form_state['nid'];
+	$category = $form_state['input']['field_pet_category']['und'][0]['value'];
+	$pet_name = $form_state['input']['title'];
+	$pet_image = $form['field_pet_image']['und']['#options'][$form_state['input']['field_pet_image']['und']];
+//Bidimentional array for Pet Tags Field
+	$ids = $form_state['input']['field_pet_tags']['und'];
+				$i = 0;
+				foreach($ids as $id){
+						if(isset($ids[$id])){
+						$inputs[$i]=$ids[$id];
+						$tags[$i] = array(
+								'id' => $inputs[$i],
+								'name' => $form['field_pet_tags']['und']['#options'][$inputs[$i]],
+						);
+						$i++;
+						}
+				}	
+	$form_data_arr = build_form_data_array($node, $category, $pet_name, $pet_image, $tags);
+	$petstore_feedback = curl_to_petstore($node, $form_data_arr, 'post');
+	if(strpos($petstore_feedback, $node) && strpos($petstore_feedback, $pet_name)){
+		drupal_set_message('Pet Data Sheet for '.$pet_name.' has been sent to Pet Store API.'.'<br>'.
+		$pet_name.' has the id number : '.$node.'.<br>'
+	);
+	}else{
+		drupal_set_message('Unknown error. The record could not be sent to Pet Sotre API.');
+	}
+}
+
+/*
+*
+*FUNCTION DATA ARRAY
+*/
+
+function build_form_data_array($node, $category, $pet_name, $pet_image, $tags){
+		$form_data = array(
+						  'id' => $node,
+						  'category' => array (
+										'id' => 1,
+										'name' => $category,),
+						  'name' => $pet_name,
+						  'photoUrls' => array (
+										0 => $pet_image,),
+						  'tags' => $tags,
+						  'status' => 'available',
+						);
+		return $form_data;
+}
+
+/*
+*
+*FUNCTION CURL API 
+*/
+
+function curl_to_petstore($pet_id, $form_data, $method) {
+	
+	switch($method){
+		case "post":
+		
+			$headers = array('accept: application/xml',
+							'Content-Type: application/json',);
+			$query = json_encode($form_data);
+			$ch = curl_init();
+			curl_setopt($ch, CURLOPT_URL,'https://petstore.swagger.io/v2/pet');
+			curl_setopt($ch, CURLOPT_HTTPHEADER,$headers);
+			curl_setopt($ch, CURLOPT_POST, 1);
+			curl_setopt($ch, CURLOPT_POSTFIELDS, $query);
+			curl_setopt($ch, CURLOPT_RETURNTRANSFER,true);
+			$resp = curl_exec($ch);
+			curl_close($ch);
+
+			break;
+		case "delete":
+			//DELETE PET
+			$headers_delete = array('api_key: special-key',
+							'Content-Type: application/json',);
+			$body_delete = '';
+			$chd = curl_init();
+			curl_setopt($chd, CURLOPT_URL,'https://petstore.swagger.io/v2/pet/'.$pet_id);
+			curl_setopt($chd, CURLOPT_CUSTOMREQUEST, "DELETE");
+			curl_setopt($chd, CURLOPT_POSTFIELDS, $body_delete);
+			curl_setopt($chd, CURLOPT_HTTPHEADER,$headers_delete);
+			curl_setopt($chd, CURLOPT_RETURNTRANSFER,true);
+			$resp = curl_exec($chd);
+			curl_close($chd);
+			
+			break;	
+	};
+	return $resp;
+}
